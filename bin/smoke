@@ -1,0 +1,106 @@
+#!/usr/bin/env ruby
+# Exercises arca_rb end to end against ARCA homologation: authentication,
+# points of sale, invoices, retries, notes, the registry and PDFs. It only
+# ever talks to homologation; receipts it issues have no fiscal effect but do
+# advance that point of sale's homologation numbering.
+#
+#   ARCA_CUIT=20111111112 ARCA_POINT_OF_SALE=3 \
+#   ARCA_CERTIFICATE=cert.pem ARCA_PRIVATE_KEY=key.pem bin/smoke
+#
+# ARCA_CERTIFICATE and ARCA_PRIVATE_KEY take a path or the PEM itself.
+# Optional: ARCA_VAT_CONDITION (monotributo), ARCA_TICKET_DIR (tmp/arca),
+# ARCA_OUTPUT (tmp/smoke), ARCA_LOG=1 to print every SOAP call.
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "arca_rb"
+require "fileutils"
+require "json"
+
+def setting(name, default = nil)
+  ENV.fetch(name) { default || abort("Falta #{name}. Ver el encabezado de bin/smoke.") }
+end
+
+def pem(name)
+  value = setting(name)
+  value.include?("-----BEGIN") ? value : File.read(value)
+end
+
+def step(name)
+  print "#{name}... "
+  result = yield
+  puts "OK#{" #{result}" unless result.nil? || result == true}"
+  result
+rescue StandardError => error
+  $failures += 1
+  diagnostics = error.respond_to?(:diagnostics) && error.diagnostics.any? ? " #{error.diagnostics.inspect}" : ""
+  puts "FALLÓ #{error.class}: #{error.message}#{diagnostics}"
+  nil
+end
+
+$failures = 0
+output = setting("ARCA_OUTPUT", "tmp/smoke")
+FileUtils.mkdir_p(output)
+log = ENV["ARCA_LOG"] ? ->(event) { puts "\n  [#{event.operation} #{event.status} #{event.duration.round(2)}s]" } : nil
+transport = Arca::Soap::Transport.new(on_request: log)
+
+credentials = Arca::Credentials.new(
+  environment: :homologation,
+  cuit: setting("ARCA_CUIT"),
+  certificate_pem: pem("ARCA_CERTIFICATE"),
+  private_key_pem: pem("ARCA_PRIVATE_KEY"),
+  ticket_store: Arca::TicketStore::File.new(setting("ARCA_TICKET_DIR", "tmp/arca"))
+)
+issuer = Arca::Issuer.new(cuit: credentials.cuit, legal_name: "Prueba arca_rb", vat_condition: setting("ARCA_VAT_CONDITION", "monotributo"),
+  fiscal_address: "Domicilio fiscal de prueba", activity_started_on: "2020-01-01")
+invoicer = Arca::Invoicer.new(credentials:, issuer:, point_of_sale: { number: setting("ARCA_POINT_OF_SALE"), commercial_address: "Sucursal de prueba" }, transport:)
+consumer = { document_type: :unidentified, document_number: 0, vat_condition: :final_consumer }
+today = Date.today
+
+step("Certificado") { credentials.validate! && "vence #{credentials.certificate_expires_at.to_date}" }
+step("Puntos de venta habilitados") { invoicer.client.points_of_sale.map(&:to_h).inspect }
+step("Punto de venta #{invoicer.point_of_sale.number}") { invoicer.verify_point_of_sale!&.to_h || "homologación no registra puntos de venta" }
+step("Conexión WSFE") { invoicer.client.test_connection.to_h }
+
+draft = step("Preparar factura de servicios") do
+  invoicer.prepare(receiver: consumer, items: [ { description: "Prueba arca_rb #{Arca::VERSION}", unit_price: "1.00" } ], issue_date: today,
+    service_period: { from: today - 5, to: today, payment_due: today + 10 })
+end
+receipt = step("Autorizar") { invoicer.authorize(draft) } if draft
+
+if receipt
+  puts "  #{receipt.receipt_type.document_title} #{receipt.receipt_type.letter} N° #{receipt.number}, CAE #{receipt.cae} (vence #{receipt.cae_expires_on})"
+  step("Reintentar el mismo borrador") do
+    retried = invoicer.authorize(Arca::Draft.from_h(JSON.parse(JSON.generate(draft.to_h))))
+    raise "emitió otro comprobante" unless retried.recovered? && retried.cae == receipt.cae
+
+    "recuperado con el mismo CAE"
+  end
+  step("Consultar") { invoicer.client.consult_receipt(receipt_type: receipt.receipt_type, receipt_number: receipt.number).to_h }
+  step("PDF") { File.binwrite("#{output}/factura.pdf", receipt.pdf).then { "#{output}/factura.pdf" } }
+  step("Nota de débito") do
+    note = invoicer.authorize(invoicer.prepare_debit_note(receipt, issue_date: today, items: [ { description: "Recargo de prueba", unit_price: "0.50" } ]))
+    File.binwrite("#{output}/nota_debito.pdf", note.pdf)
+    "N° #{note.number}, CAE #{note.cae}"
+  end
+  step("Nota de crédito") do
+    note = invoicer.authorize(invoicer.prepare_credit_note(receipt, issue_date: today))
+    File.binwrite("#{output}/nota_credito.pdf", note.pdf)
+    "N° #{note.number}, CAE #{note.cae}"
+  end
+end
+
+step("Número tomado por otro comprobante") do
+  stale = invoicer.prepare(receiver: consumer, items: [ { description: "A", unit_price: "2.00" } ], issue_date: today)
+  invoicer.authorize(invoicer.prepare(receiver: consumer, items: [ { description: "B", unit_price: "3.00" } ], issue_date: today))
+  invoicer.authorize(stale)
+  raise "no detectó el número tomado"
+rescue Arca::ReceiptNumberTaken => error
+  "ReceiptNumberTaken #{error.codes}"
+end
+
+padron = Arca::PadronClient.new(credentials:, transport:)
+step("Padrón persona humana") { padron.find_person(tax_id: "20123456786").to_h }
+step("Padrón persona jurídica") { padron.find_person(tax_id: "30712345671").to_h }
+
+puts $failures.zero? ? "\nTodo OK. PDFs en #{output}/" : "\n#{$failures} paso(s) fallaron."
+exit($failures.zero? ? 0 : 1)
