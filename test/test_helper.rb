@@ -1,5 +1,4 @@
 require "minitest/autorun"
-require "minitest/mock"
 require "openssl"
 require "arca_rb"
 

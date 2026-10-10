@@ -37,7 +37,7 @@ Requiere Ruby 3.3 o superior.
 
 ```ruby
 # Gemfile
-gem "arca_rb", github: "Elmolesto/arca_rb", tag: "v0.4.1"
+gem "arca_rb", github: "Elmolesto/arca_rb", tag: "v0.4.2"
 ```
 
 ```ruby

@@ -1,6 +1,6 @@
 require "base64"
 require "bigdecimal"
-require "cgi"
+require "cgi/escape"
 require "date"
 require "json"
 require "rqrcode"

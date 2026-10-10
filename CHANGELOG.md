@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.2
+
+- CI en Ruby 3.3, 3.4 y 4.0 con `actions/checkout` v7, y Dependabot para gemas
+  y actions.
+- Tests con minitest 6.
+- `lib/arca` se ordena en carpetas por capa (`configuration`, `fiscal`,
+  `services`, `pdf`, `support`). Los nombres de las clases no cambian.
+- Carga `cgi/escape` en lugar de `cgi`, que Ruby 4.0 eliminó y hacía que la
+  gema mostrara un aviso al cargarse.
+
 ## 0.4.1
 
 - Repositorio público con licencia MIT.

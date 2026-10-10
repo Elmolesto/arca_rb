@@ -13,8 +13,26 @@ bundle exec rake test
 bundle exec rubocop . bin/smoke
 ```
 
-Requiere Ruby 3.3 o superior. El CI corre los tests en 3.3 y 3.4 y RuboCop en
+Requiere Ruby 3.3 o superior. El CI corre los tests en Ruby 3.3, 3.4 y 4.0 y RuboCop en
 cada push a `main` y en cada pull request.
+
+## Estructura del código
+
+`lib/arca` se agrupa por capa:
+
+| Carpeta | Qué contiene |
+|---|---|
+| `lib/arca/` | La emisión (`Invoicer`, `Draft`, `IssuedReceipt`), los errores y la versión |
+| `configuration/` | `Credentials`, `Environment`, `TicketStore`, `Issuer` y `PointOfSale` |
+| `fiscal/` | Reglas fiscales: `Identity`, `VatCondition`, `VatRate`, `ReceiptType`, `ServicePeriod`, `Request` y `Pricing` |
+| `services/` | Los servicios de ARCA (`Soap`, `Wsaa`, `Wsfe`, `Padron`) y los clientes (`Client`, `PadronClient`) |
+| `pdf/` | `Document`, `Renderer`, `Format`, `Qr` y las fuentes |
+| `support/` | Utilidades internas (`Serialization`) |
+
+Las carpetas no son namespaces: todas las clases viven directamente bajo
+`Arca` (`Arca::ReceiptType`, `Arca::Wsfe`), salvo las de `pdf/`, que están
+bajo `Arca::Pdf`, y `Arca::Qr`. `lib/arca_rb.rb` las carga en orden. Los
+tests siguen la misma estructura en `test/arca/`.
 
 ## Pautas
 
