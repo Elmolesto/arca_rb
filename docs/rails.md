@@ -12,15 +12,15 @@ emite comprobantes reales.
 ```yaml
 # bin/rails credentials:edit --environment production
 arca:
-  cuit: "30712345671"
-  point_of_sale: 3
-  certificate_pem: |
+  certificate_pem: |                            # el CUIT del dueño sale de acá
     -----BEGIN CERTIFICATE-----
     ...
   private_key_pem: |
     -----BEGIN PRIVATE KEY-----
     ...
-  issuer:
+  issuer:                                       # quien factura
+    cuit: "30712345671"
+    point_of_sale: 3
     legal_name: Mi Empresa S.A.
     vat_condition: responsible_registered
     fiscal_address: Av. Corrientes 1234, CABA
@@ -42,17 +42,16 @@ module ArcaConfig
   def credentials
     Arca::Credentials.new(
       environment:,
-      cuit: settings[:cuit],
       certificate_pem: settings[:certificate_pem],
       private_key_pem: settings[:private_key_pem],
       ticket_store:
     )
   end
 
-  def issuer = Arca::Issuer.new(cuit: settings[:cuit], **settings.fetch(:issuer).except(:commercial_address))
+  def issuer = Arca::Issuer.new(**settings.fetch(:issuer).except(:point_of_sale, :commercial_address))
 
   def point_of_sale
-    Arca::PointOfSale.new(number: settings[:point_of_sale], commercial_address: settings.dig(:issuer, :commercial_address))
+    Arca::PointOfSale.new(number: settings.dig(:issuer, :point_of_sale), commercial_address: settings.dig(:issuer, :commercial_address))
   end
 
   # Para los tests, que no tienen credentials de ARCA.
@@ -216,7 +215,7 @@ class FakeArcaClient
   end
 end
 
-ArcaConfig.settings = { cuit: "20111111112", point_of_sale: 3, issuer: { legal_name: "Test", vat_condition: :monotributo } }
+ArcaConfig.settings = { issuer: { cuit: "20111111112", point_of_sale: 3, legal_name: "Test", vat_condition: :monotributo } }
 invoicer = Arca::Invoicer.new(credentials: ArcaConfig.credentials, issuer: ArcaConfig.issuer, point_of_sale: ArcaConfig.point_of_sale, client: FakeArcaClient.new)
 ```
 

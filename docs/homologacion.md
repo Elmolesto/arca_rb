@@ -56,12 +56,12 @@ En Rails, ver [Integración con Rails](rails.md).
 Desde un clon del repositorio:
 
 ```bash
-ARCA_CUIT=20111111112 ARCA_POINT_OF_SALE=3 ARCA_CERTIFICATE=cert.pem ARCA_PRIVATE_KEY=key.pem bin/smoke
+ARCA_POINT_OF_SALE=3 ARCA_CERTIFICATE=cert.pem ARCA_PRIVATE_KEY=key.pem bin/smoke
 ```
 
 | Variable | |
 |---|---|
-| `ARCA_CUIT` | CUIT dueño del certificado |
+| `ARCA_CUIT` | Opcional; por defecto, el CUIT del certificado |
 | `ARCA_POINT_OF_SALE` | Cualquier número en homologación |
 | `ARCA_CERTIFICATE`, `ARCA_PRIVATE_KEY` | Ruta o el PEM |
 | `ARCA_VAT_CONDITION` | Condición del emisor; `monotributo` por defecto |

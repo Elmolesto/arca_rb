@@ -32,9 +32,33 @@ class Arca::CredentialsTest < Minitest::Test
 
   def test_rejects_an_invalid_cuit
     certificate_pem, private_key_pem = certificate_pair
-    credentials = Arca::Credentials.new(environment: :production, cuit: "20351770548", certificate_pem:, private_key_pem:)
+    credentials = Arca::Credentials.new(environment: :production, cuit: "20111111113", certificate_pem:, private_key_pem:)
 
     assert_raises(Arca::ConfigurationError) { credentials.validate! }
+  end
+
+  def test_reads_the_cuit_from_the_certificate
+    certificate_pem, private_key_pem = certificate_pair(subject: "/CN=facturacion/serialNumber=CUIT 20111111112")
+    credentials = Arca::Credentials.new(environment: :production, certificate_pem:, private_key_pem:)
+
+    assert_equal "20111111112", credentials.cuit
+    assert credentials.validate!
+  end
+
+  def test_rejects_a_cuit_that_is_not_the_certificate_owner
+    certificate_pem, private_key_pem = certificate_pair(subject: "/CN=facturacion/serialNumber=CUIT 20111111112")
+    credentials = Arca::Credentials.new(environment: :production, cuit: "20221124643", certificate_pem:, private_key_pem:)
+
+    error = assert_raises(Arca::ConfigurationError) { credentials.validate! }
+    assert_equal "El CUIT configurado no es el del certificado de ARCA (20111111112)", error.message
+  end
+
+  def test_needs_the_cuit_when_the_certificate_has_none
+    certificate_pem, private_key_pem = certificate_pair
+    credentials = Arca::Credentials.new(environment: :production, certificate_pem:, private_key_pem:)
+
+    error = assert_raises(Arca::ConfigurationError) { credentials.validate! }
+    assert_equal "Falta el CUIT dueño del certificado de ARCA", error.message
   end
 
   def test_reports_when_the_certificate_expires

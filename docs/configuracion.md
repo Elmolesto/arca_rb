@@ -52,16 +52,20 @@ En homologación no hace falta: ARCA acepta cualquier número.
 ```ruby
 credentials = Arca::Credentials.new(
   environment: :production,            # o :homologation
-  cuit: "30712345671",                 # CUIT dueño del certificado
   certificate_pem: ENV.fetch("ARCA_CERTIFICATE"),
   private_key_pem: ENV.fetch("ARCA_PRIVATE_KEY"),
   ticket_store: Arca::TicketStore::Cache.new(Rails.cache)
 )
 
+credentials.cuit                        # "30712345671", leído del certificado
 credentials.validate!                   # CUIT, par certificado/clave y vencimiento, sin llamar a ARCA
 credentials.certificate_expires_at      # => 2028-08-02 12:00:00 UTC
 credentials.certificate_expires_within?(30 * 86_400)
 ```
+
+ARCA escribe el CUIT del dueño en el certificado (`serialNumber=CUIT ...`), y
+`Credentials` lo lee de ahí. Se puede pasar `cuit:` para un certificado que no
+lo tenga; si los dos no coinciden, `validate!` lo avisa.
 
 `environment` sólo acepta `:homologation` y `:production`. Elegilo en tu código
 según el entorno de la app, no desde un archivo de configuración editable: así
@@ -73,9 +77,11 @@ o en una excepción no los expone.
 
 ### Emitir por otro CUIT
 
-El certificado puede pertenecer a un CUIT, por ejemplo un estudio contable, y
-emitir por otro que le delegó el servicio `wsfe`. En ese caso `credentials.cuit`
-es el dueño del certificado y `issuer.cuit` el de quien factura.
+El certificado puede pertenecer a un CUIT, por ejemplo un estudio contable o
+una persona, y emitir por otro que le delegó el servicio `wsfe` en el
+*Administrador de Relaciones de Clave Fiscal*. En ese caso `credentials.cuit`
+es el dueño del certificado y `issuer.cuit` el de quien factura. La app sólo
+configura el del emisor: el otro sale del certificado.
 
 ## 4. Ticket de acceso (WSAA)
 

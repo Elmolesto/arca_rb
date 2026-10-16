@@ -11,12 +11,12 @@ module ArcaTestHelpers
     Arca::Credentials.new(environment: :production, cuit:, certificate_pem: "certificate", private_key_pem: "key")
   end
 
-  def certificate_pair(not_after: Time.now + 86_400)
+  def certificate_pair(not_after: Time.now + 86_400, subject: "/CN=arca-test")
     key = OpenSSL::PKey::RSA.new(2048)
     certificate = OpenSSL::X509::Certificate.new
     certificate.version = 2
     certificate.serial = 1
-    certificate.subject = certificate.issuer = OpenSSL::X509::Name.parse("/CN=arca-test")
+    certificate.subject = certificate.issuer = OpenSSL::X509::Name.parse(subject)
     certificate.public_key = key.public_key
     certificate.not_before = Time.now - 86_400
     certificate.not_after = not_after

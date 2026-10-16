@@ -37,7 +37,7 @@ Requiere Ruby 3.3 o superior.
 
 ```ruby
 # Gemfile
-gem "arca_rb", github: "Elmolesto/arca_rb", tag: "v0.4.2"
+gem "arca_rb", github: "Elmolesto/arca_rb", tag: "v0.5.0"
 ```
 
 ```ruby
@@ -53,8 +53,7 @@ services. [Configuración](docs/configuracion.md) explica cómo obtenerlos.
 ```ruby
 credentials = Arca::Credentials.new(
   environment: :homologation,                        # :production para comprobantes reales
-  cuit: "20111111112",                               # dueño del certificado
-  certificate_pem: File.read("arca.crt"),
+  certificate_pem: File.read("arca.crt"),            # el CUIT del dueño sale del certificado
   private_key_pem: File.read("arca.key")
 )
 

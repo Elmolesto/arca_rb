@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- `Arca::Credentials` lee el CUIT del dueño del certificado del propio
+  certificado (`serialNumber=CUIT ...`); `cuit:` pasa a ser opcional.
+- `Credentials#certificate_cuit` y `validate!` avisa si el `cuit:` configurado
+  no es el del certificado.
+- `bin/smoke` ya no necesita `ARCA_CUIT`.
+
 ## 0.4.2
 
 - CI en Ruby 3.3, 3.4 y 4.0 con `actions/checkout` v7, y Dependabot para gemas

@@ -4,11 +4,11 @@
 # ever talks to homologation; receipts it issues have no fiscal effect but do
 # advance that point of sale's homologation numbering.
 #
-#   ARCA_CUIT=20111111112 ARCA_POINT_OF_SALE=3 \
-#   ARCA_CERTIFICATE=cert.pem ARCA_PRIVATE_KEY=key.pem bin/smoke
+#   ARCA_POINT_OF_SALE=3 ARCA_CERTIFICATE=cert.pem ARCA_PRIVATE_KEY=key.pem bin/smoke
 #
 # ARCA_CERTIFICATE and ARCA_PRIVATE_KEY take a path or the PEM itself.
-# Optional: ARCA_VAT_CONDITION (monotributo), ARCA_TICKET_DIR (tmp/arca),
+# Optional: ARCA_CUIT (read from the certificate), ARCA_VAT_CONDITION
+# (monotributo), ARCA_TICKET_DIR (tmp/arca),
 # ARCA_OUTPUT (tmp/smoke), ARCA_LOG=1 to print every SOAP call.
 
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
@@ -45,7 +45,7 @@ transport = Arca::Soap::Transport.new(on_request: log)
 
 credentials = Arca::Credentials.new(
   environment: :homologation,
-  cuit: setting("ARCA_CUIT"),
+  cuit: ENV["ARCA_CUIT"],
   certificate_pem: pem("ARCA_CERTIFICATE"),
   private_key_pem: pem("ARCA_PRIVATE_KEY"),
   ticket_store: Arca::TicketStore::File.new(setting("ARCA_TICKET_DIR", "tmp/arca"))

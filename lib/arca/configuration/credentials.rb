@@ -6,18 +6,32 @@ module Arca
   # clients; the issuer being invoiced for may be a different CUIT that
   # delegated the service to this one.
   #
+  # `cuit` is the certificate owner. ARCA writes it in the certificate subject
+  # (serialNumber=CUIT 20111111112), so it is read from there unless given.
+  #
   # `ticket_store` keeps WSAA access tickets, keyed by the certificate owner so
   # every issuer delegating to it shares them. See Arca::TicketStore.
   class Credentials
-    def initialize(environment:, cuit:, certificate_pem:, private_key_pem:, ticket_store: TicketStore::File.new(File.join(Dir.pwd, "tmp", "arca")))
+    def initialize(environment:, certificate_pem:, private_key_pem:, cuit: nil, ticket_store: TicketStore::File.new(File.join(Dir.pwd, "tmp", "arca")))
       @environment = Environment.fetch(environment)
-      @cuit = cuit.to_s.gsub(/\D/, "")
+      @given_cuit = cuit.nil? || cuit.to_s.strip.empty? ? nil : cuit.to_s.gsub(/\D/, "")
       @certificate_pem = certificate_pem
       @private_key_pem = private_key_pem
       @ticket_store = ticket_store
     end
 
-    attr_reader :environment, :cuit, :certificate_pem, :private_key_pem, :ticket_store
+    attr_reader :environment, :certificate_pem, :private_key_pem, :ticket_store
+
+    def cuit = @given_cuit || certificate_cuit.to_s
+
+    # The CUIT in the certificate subject, or nil if it has none or cannot be
+    # read.
+    def certificate_cuit
+      serial = OpenSSL::X509::Certificate.new(certificate_pem).subject.to_a.find { |name, _value, _type| name == "serialNumber" }
+      serial && serial[1][/\ACUIT (\d{11})\z/, 1]
+    rescue OpenSSL::OpenSSLError, TypeError
+      nil
+    end
 
     # When the certificate stops working. Renewing it takes a few days of
     # paperwork in ARCA, so apps should warn well before.
@@ -33,9 +47,12 @@ module Arca
     def production? = environment == :production
 
     def validate!(now: Time.now)
-      raise ConfigurationError, "Falta el CUIT representante de ARCA" unless Identity.valid_tax_id?(cuit)
       raise ConfigurationError, "Falta el certificado de ARCA" if blank?(certificate_pem)
       raise ConfigurationError, "Falta la clave privada de ARCA" if blank?(private_key_pem)
+      raise ConfigurationError, "Falta el CUIT dueño del certificado de ARCA" unless Identity.valid_tax_id?(cuit)
+      if @given_cuit && certificate_cuit && @given_cuit != certificate_cuit
+        raise ConfigurationError, "El CUIT configurado no es el del certificado de ARCA (#{certificate_cuit})"
+      end
 
       certificate = OpenSSL::X509::Certificate.new(certificate_pem)
       private_key = OpenSSL::PKey.read(private_key_pem)
