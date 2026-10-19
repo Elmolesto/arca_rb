@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- El PDF sigue el modelo impreso de ARCA: el comprobante C lleva los totales
+  en un cuadro, el domicilio comercial entra en una línea, el número de página
+  va junto al CAE y la leyenda de responsabilidad es la de ARCA. Las alícuotas
+  de IVA y los otros tributos en cero ya no se imprimen.
+
 ## 0.5.0
 
 - `Arca::Credentials` lee el CUIT del dueño del certificado del propio

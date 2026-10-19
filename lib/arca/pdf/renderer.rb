@@ -21,11 +21,14 @@ module Arca
       ITEM_HEADER_TOP = 528
       CONTINUATION_ITEM_HEADER_TOP = 790
       ITEM_HEADER_HEIGHT = 22
+      # The first row starts 18 points below the items header.
+      ITEM_BODY_TOP = 508
       # The last item must end above the totals; earlier ones may use the page
       # down to the page number.
       ITEM_BODY_BOTTOM = 330
       PAGE_BODY_BOTTOM = 60
       TOTALS_TOP = 315
+      TOTALS_HEIGHT = 112
 
       # `proforma: { title: "ORDEN DE COMPRA", number: 1234 }` prints a draft
       # as a commercial document of the app's own (a quote, a purchase order)
@@ -49,9 +52,7 @@ module Arca
           pdf.font(FONT)
           @copies.each_with_index do |copy, index|
             pdf.start_new_page unless index.zero?
-            first_page = pdf.page_number
             render_copy(pdf, copy)
-            number_pages(pdf, first_page..pdf.page_number)
           end
         end.render
       end
@@ -68,13 +69,14 @@ module Arca
       end
 
       def render_copy(pdf, copy)
+        first_page = pdf.page_number
         draw_banner(pdf, copy)
         draw_header(pdf)
         draw_service_period(pdf) if document.service_period
         draw_receiver(pdf)
         draw_associated_receipts(pdf) if document.associated_receipts.any?
         draw_items_header(pdf, top: ITEM_HEADER_TOP)
-        remaining = draw_items(pdf, document.items, top: ITEM_HEADER_TOP - ITEM_HEADER_HEIGHT - 2)
+        remaining = draw_items(pdf, document.items, top: ITEM_BODY_TOP)
 
         until remaining.empty?
           pdf.start_new_page
@@ -85,7 +87,8 @@ module Arca
 
         draw_observations(pdf) if document.observations
         draw_totals(pdf)
-        document.authorized? ? draw_fiscal_footer(pdf) : draw_draft_footer(pdf)
+        document.authorized? ? draw_fiscal_footer(pdf, first_page:) : draw_draft_footer(pdf)
+        number_pages(pdf, first_page..pdf.page_number, skip_last: document.authorized?)
       end
 
       def draw_banner(pdf, copy)
@@ -109,9 +112,9 @@ module Arca
         else
           text(pdf, issuer.legal_name.to_s.upcase, at: [ 35, 768 ], width: 238, height: 14, size: 11, style: :bold, align: :center)
         end
-        label_value(pdf, "Razón Social:", issuer.legal_name, y: 744, label_x: 35, value_x: 140, width: 130, size: 8.5)
-        label_value(pdf, "Domicilio Comercial:", document.commercial_address, y: 726, label_x: 35, value_x: 140, width: 130, height: 22, size: 8.5) if document.commercial_address
-        label_value(pdf, "Condición frente al IVA:", VatCondition.label(issuer.vat_condition), y: 692, label_x: 35, value_x: 140, width: 150, size: 8.5, value_style: :bold)
+        label_value(pdf, "Razón Social:", issuer.legal_name, y: 744, label_x: 35, value_x: 120, width: 160, size: 8.5)
+        label_value(pdf, "Domicilio Comercial:", document.commercial_address, y: 724, label_x: 35, value_x: 120, width: 167, height: 22, size: 8.5) if document.commercial_address
+        label_value(pdf, "Condición frente al IVA:", VatCondition.label(issuer.vat_condition), y: 692, label_x: 35, value_x: 120, width: 160, size: 8.5, value_style: :bold)
       end
 
       def draw_letter_badge(pdf)
@@ -153,7 +156,7 @@ module Arca
         receiver = document.receiver
         box(pdf, CONTENT_LEFT, 636, CONTENT_WIDTH, 62, line_width: 0.6)
         unless receiver.unidentified?
-          label_value(pdf, "#{receiver.document_type.to_s.upcase}:", receiver.document_type == :dni ? receiver.document_number : Format.cuit(receiver.document_number),
+          label_value(pdf, receiver.document_type == :cuit ? "CUIT:" : "Documento:", receiver.document_type == :dni ? receiver.document_number : Format.cuit(receiver.document_number),
             y: 624, label_x: 35, value_x: 135, width: 120)
         end
         text(pdf, "Apellido y Nombre / Razón Social:", at: [ 290, 624 ], width: 260, height: 11, size: 9, style: :bold)
@@ -240,38 +243,57 @@ module Arca
       end
 
       def draw_observations(pdf)
-        text(pdf, "Observaciones:", at: [ 35, TOTALS_TOP - 8 ], width: 300, height: 11, size: 8.5, style: :bold)
-        text(pdf, document.observations.to_s, at: [ 35, TOTALS_TOP - 21 ], width: 300, height: 90, size: 8, valign: :top)
+        text(pdf, "Observaciones:", at: [ 35, TOTALS_TOP - 28 ], width: 300, height: 11, size: 8.5, style: :bold)
+        text(pdf, document.observations.to_s, at: [ 35, TOTALS_TOP - 41 ], width: 300, height: 58, size: 8, valign: :top)
       end
 
       def draw_totals(pdf)
-        rows = total_rows
-        top = TOTALS_TOP - 6
+        return draw_invoice_c_totals(pdf) if document.authorized? && document.letter == "C"
+
+        rows = document.authorized? ? total_rows : []
         rows.each_with_index do |(label, value), index|
-          y = top - (index * 14)
-          text(pdf, label, at: [ 340, y ], width: 155, height: 12, size: 8.5, style: :bold, align: :right)
-          text(pdf, value, at: [ 499, y ], width: 65, height: 12, size: 8.5, align: :right)
+          y = 270 - (index * 14)
+          text(pdf, label, at: [ 350, y ], width: 145, height: 12, size: 8, align: :right)
+          text(pdf, value, at: [ 504, y ], width: 60, height: 12, size: 8, align: :right)
         end
 
-        total_top = top - (rows.length * 14) - 4
-        box(pdf, 340, total_top, 227, 22, line_width: 0.6)
-        text(pdf, "Importe Total:", at: [ 345, total_top - 5 ], width: 120, height: 13, size: 10.5, style: :bold, align: :right)
-        text(pdf, money(document.total_amount), at: [ 470, total_top - 5 ], width: 92, height: 13, size: 10.5, style: :bold, align: :right)
-        text(pdf, "Son #{document.currency_name}: #{Format.amount_in_words(document.total_amount)}", at: [ 164, total_top - 28 ], width: 400, height: 18, size: 7.5, align: :right)
+        total_top = 270 - (rows.length * 14) + 2
+        box(pdf, 350, total_top, 214, 24, line_width: 0.6)
+        text(pdf, "Importe Total:", at: [ 357, total_top - 7 ], width: 105, height: 13, size: 10.5, style: :bold, align: :right)
+        text(pdf, money(document.total_amount), at: [ 470, total_top - 7 ], width: 86, height: 13, size: 10.5, style: :bold, align: :right)
+        text(pdf, "Son #{document.currency_name} #{Format.amount_in_words(document.total_amount)}", at: [ 164, 155 ], width: 400, height: 18, size: 7.5, align: :right)
         draw_transparency_regime(pdf, total_top - 48) if document.letter == "B" && document.receiver.final_consumer?
+      end
+
+      def draw_invoice_c_totals(pdf)
+        box(pdf, CONTENT_LEFT, TOTALS_TOP, CONTENT_WIDTH, TOTALS_HEIGHT, line_width: 1)
+        [
+          [ "Subtotal:", money(document.total_amount - document.other_taxes_amount) ],
+          [ "Importe Otros Tributos:", money(document.other_taxes_amount) ],
+          [ "Importe Total:", money(document.total_amount) ]
+        ].each_with_index do |(label, value), index|
+          y = 266 - (index * 20)
+          text(pdf, label, at: [ 355, y ], width: 125, height: 13, size: 9.5, style: :bold, align: :right)
+          text(pdf, value, at: [ 488, y ], width: 68, height: 13, size: 9.5, style: :bold, align: :right)
+        end
+        text(pdf, "Son #{document.currency_name} #{Format.amount_in_words(document.total_amount)}", at: [ 164, 178 ], width: 392, height: 18, size: 8.5, align: :right)
       end
 
       def total_rows
         rows = case document.letter
         when "A"
           [ [ "Importe Neto Gravado:", money(document.net_amount) ] ] +
-            VatRate::IDS.keys.reject(&:zero?).sort.reverse.map { |rate| [ "IVA #{Format.percentage(rate)}:", money(vat_for(rate)) ] }
+            VatRate::IDS.keys.reject(&:zero?).sort.reverse.filter_map do |rate|
+              amount = vat_for(rate)
+              [ "IVA #{Format.percentage(rate)}:", money(amount) ] unless amount.zero?
+            end
         else
           [ [ "Subtotal:", money(document.total_amount - document.other_taxes_amount) ] ]
         end
         rows << [ "Importe Exento:", money(document.exempt_amount) ] unless document.exempt_amount.zero?
         rows << [ "Importe No Gravado:", money(document.untaxed_amount) ] unless document.untaxed_amount.zero?
-        rows << [ "Importe Otros Tributos:", money(document.other_taxes_amount) ]
+        rows << [ "Importe Otros Tributos:", money(document.other_taxes_amount) ] unless document.other_taxes_amount.zero?
+        rows
       end
 
       # Ley 27.743 (Régimen de Transparencia Fiscal al Consumidor): B receipts
@@ -283,25 +305,30 @@ module Arca
         label_value(pdf, "Otros Impuestos Nacionales Indirectos:", money(0), y: y - 17, label_x: 230, value_x: 395, width: 90, size: 7.5, height: 10)
       end
 
-      def draw_fiscal_footer(pdf)
+      def draw_fiscal_footer(pdf, first_page:)
+        total = pdf.page_number - first_page + 1
         pdf.image document.qr.png, at: [ 35, 126 ], width: 65, height: 65
         text(pdf, "ARCA", at: [ 112, 134 ], width: 112, height: 22, size: 17, style: :bold, color: "444444")
         text(pdf, "AGENCIA DE RECAUDACIÓN\nY CONTROL ADUANERO", at: [ 112, 112 ], width: 112, height: 12, size: 4, color: "444444")
         text(pdf, "Comprobante Autorizado", at: [ 112, 80 ], width: 180, height: 10, size: 9, style: :italic)
-        text(pdf, "Esta Agencia no se responsabiliza por los datos ingresados en el detalle de la operación.", at: [ 112, 66 ], width: 300, height: 8, size: 6, style: :italic)
-        label_value(pdf, "CAE N°:", document.cae, y: 102, label_x: 414, value_x: 465, width: 95, size: 10, height: 12)
-        label_value(pdf, "Fecha de Vto. de CAE:", Format.date(document.cae_expires_on), y: 84, label_x: 382, value_x: 486, width: 74, size: 10, height: 12)
+        text(pdf, "Esta Administración Federal no se responsabiliza por los datos ingresados en el detalle de la operación.", at: [ 112, 66 ], width: 300, height: 8, size: 6, style: :italic)
+        text(pdf, "Pág. #{total}/#{total}", at: [ 302, 92 ], width: 70, height: 11, size: 9, style: :bold, align: :center)
+        label_value(pdf, "CAE N°:", document.cae, y: 102, label_x: 414, value_x: 465, width: 91, size: 10, height: 12)
+        label_value(pdf, "Fecha de Vto. de CAE:", Format.date(document.cae_expires_on), y: 84, label_x: 382, value_x: 486, width: 70, size: 10, height: 12)
       end
 
       def draw_draft_footer(pdf)
         text(pdf, "Previsualización · Sin validez fiscal · No contiene CAE ni código QR de ARCA.", at: [ 200, 52 ], width: 364, height: 12, size: 7.5, align: :right)
       end
 
-      def number_pages(pdf, pages)
+      def number_pages(pdf, pages, skip_last: false)
+        total = pages.count
         pages.each_with_index do |page, index|
           pdf.go_to_page(page)
-          text(pdf, "Pág. #{index + 1}/#{pages.count}", at: [ 470, 40 ], width: 94, height: 11, size: 9, style: :bold, align: :right)
           pdf.stroke_horizontal_line CONTENT_LEFT, CONTENT_RIGHT, at: 25
+          next if skip_last && index == total - 1
+
+          text(pdf, "Pág. #{index + 1}/#{total}", at: [ 470, 40 ], width: 94, height: 11, size: 9, style: :bold, align: :right)
         end
       end
 
