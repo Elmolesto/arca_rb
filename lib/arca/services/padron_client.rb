@@ -8,6 +8,8 @@ module Arca
     # constancia de inscripción.
     NotFound = Class.new(Rejection)
 
+    # What ARCA publishes about a taxpayer. The address, the VAT condition and
+    # the start date are nil when the registry does not inform them.
     Person = Data.define(:tax_id, :legal_name, :fiscal_address, :vat_condition, :activity_started_on, :active) do
       def active? = active
     end
@@ -90,9 +92,7 @@ module Arca
     def fiscal_address(general_data)
       address = general_data[:domicilio_fiscal] || {}
       value = address.values_at(:direccion, :localidad, :descripcion_provincia, :cod_postal).map { |part| text(part) }.reject(&:empty?).join(", ")
-      raise Rejection, "ARCA no informó un domicilio fiscal" if value.empty?
-
-      value
+      value.empty? ? nil : value
     end
 
     def vat_condition(response)
@@ -101,8 +101,6 @@ module Arca
       taxes = collection(response.dig(:datos_regimen_general, :impuesto))
       return :responsible_registered if taxes.any? { |tax| tax[:id_impuesto].to_s == "30" }
       return :vat_exempt if taxes.any? { |tax| tax[:id_impuesto].to_s == "32" && tax[:estado_impuesto].to_s == "AC" }
-
-      raise Rejection, "ARCA no informó una condición frente al IVA compatible"
     end
 
     def activity_started_on(response)
@@ -113,7 +111,7 @@ module Arca
         *collection(response.dig(:datos_regimen_general, :actividad)),
         *collection(response.dig(:datos_monotributo, :actividad_monotributista))
       ].filter_map { |activity| activity[:periodo].to_s if activity[:periodo].to_s.match?(/\A\d{6}\z/) }
-      raise Rejection, "ARCA no informó el inicio de actividades" if periods.empty?
+      return if periods.empty?
 
       Date.strptime(periods.min, "%Y%m")
     end

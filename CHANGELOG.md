@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2
+
+- `PadronClient` ya no rechaza la consulta por datos que el padrón no publica:
+  `fiscal_address`, `vat_condition` y `activity_started_on` llegan en `nil` cuando
+  ARCA no los informa (una persona humana recién inscripta en monotributo, por
+  ejemplo). Sólo se levanta `Rejection` si ARCA no informa una razón social.
+- `Issuer.from_padron` necesita la condición frente al IVA: cuando el padrón no
+  la trae, hay que construir el `Issuer` con `vat_condition:` a mano.
+
 ## 0.5.1
 
 - El PDF sigue el modelo impreso de ARCA: el comprobante C lleva los totales

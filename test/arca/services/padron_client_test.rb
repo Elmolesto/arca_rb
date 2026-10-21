@@ -63,6 +63,24 @@ class Arca::PadronClientTest < Minitest::Test
     assert_equal Date.new(2015, 3, 2), person.activity_started_on
   end
 
+  def test_what_the_registry_does_not_inform_is_nil
+    # Production answer for a natural person whose constancia carries only
+    # identity: no address, VAT condition, VAT regime or activity date.
+    response = {
+      datos_generales: { id_persona: 27466828292, apellido: "BARRABINO", nombre: "MARTINA NICOLE", estado_clave: "ACTIVO" },
+      metadata: {}
+    }
+
+    person = Arca::PadronClient.new(credentials: production_credentials, service: FakeService.new(response)).find_person(tax_id: "27466828292")
+
+    assert_equal "27466828292", person.tax_id
+    assert_equal "BARRABINO MARTINA NICOLE", person.legal_name
+    assert_nil person.fiscal_address
+    assert_nil person.vat_condition
+    assert_nil person.activity_started_on
+    assert_predicate person, :active?
+  end
+
   def test_reports_a_cuit_without_fiscal_data
     service = FakeService.new({ error_constancia: { error: "No existe persona con ese Id" } })
 

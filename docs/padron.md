@@ -9,11 +9,18 @@ person = padron.find_person(tax_id: "30-71234567-1")
 
 person.tax_id               # "30712345671"
 person.legal_name           # "MI EMPRESA S.A." o "GONZALEZ MARIA"
-person.fiscal_address       # "AV CORRIENTES 1234, CIUDAD AUTONOMA BUENOS AIRES, 1043"
-person.vat_condition        # :responsible_registered, :monotributo o :vat_exempt
-person.activity_started_on  # Date
+person.fiscal_address       # "AV CORRIENTES 1234, CIUDAD AUTONOMA BUENOS AIRES, 1043" o nil
+person.vat_condition        # :responsible_registered, :monotributo, :vat_exempt o nil
+person.activity_started_on  # Date o nil
 person.active?              # false si la clave no está ACTIVA
 ```
+
+El padrón no publica siempre todo. En una persona humana recién inscripta en
+monotributo es común que la respuesta traiga sólo la identidad y el
+`estado_clave`: ahí `fiscal_address`, `vat_condition` y `activity_started_on`
+llegan en `nil` y los completa tu aplicación. La consulta sólo garantiza
+`tax_id`, `legal_name` y el estado; si ARCA no informa el nombre, sí levanta
+`Rejection`.
 
 El certificado tiene que tener asociado el servicio del padrón:
 - `ws_sr_constancia_inscripcion` en producción;
@@ -47,6 +54,10 @@ issuer = Arca::Issuer.from_padron(person, gross_income: "901-123456-7")
 ARCA no informa los ingresos brutos y a veces tiene el domicilio desactualizado.
 Mostrale los datos al usuario para que los confirme o corrija antes de
 guardarlos.
+
+`from_padron` necesita la condición frente al IVA. Si el padrón no la trae
+(`person.vat_condition` en `nil`), construí el emisor con `vat_condition:`
+explícita en lugar de usar este atajo.
 
 ## En homologación
 
